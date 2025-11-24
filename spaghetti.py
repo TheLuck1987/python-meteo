@@ -29,79 +29,49 @@ PAST_MEAN_LABEL = "MEDIA 50 ANNI"
 
 # --- FUNZIONI UTILI ---
 def get_data(latitude, longitude, local_path):
-    """Scarica i dati meteo per le coordinate."""
     url = f"https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&daily=wind_direction_10m_dominant&hourly=temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,precipitation_probability,precipitation,cloud_cover,wind_speed_10m,wind_gusts_10m,wind_direction_10m,surface_pressure,cape,snowfall,showers,rain&models=ecmwf_ifs025,icon_d2,gfs_global,ecmwf_ifs,icon_global,gem_regional,knmi_harmonie_arome_europe,dmi_harmonie_arome_europe,meteofrance_arpege_europe,italia_meteo_arpae_icon_2i,bom_access_global,cma_grapes_global"
-    response = requests.get(url, stream=True)
-    response.raise_for_status()
+    r = requests.get(url)
+    r.raise_for_status()
     with open(local_path, 'wb') as f:
-        for chunk in response.iter_content(chunk_size=8192):
-            f.write(chunk)
+        f.write(r.content)
 
-def robust_mean(row):
-    """Calcola la media robusta ignorando valori outlier e None/NaN."""
-    if isinstance(row, (list, np.ndarray)):
-        vals = np.array([v for v in row if v is not None and not pd.isna(v)])
-    else:
-        vals = row.dropna().values
+def robust_mean(arr):
+    vals = np.array([v for v in arr if v is not None and not pd.isna(v)])
     if len(vals) == 0:
         return np.nan
-    Q1 = np.percentile(vals, 25)
-    Q3 = np.percentile(vals, 75)
-    IQR = Q3 - Q1
-    filtered = [v for v in vals if Q1 - 1.5*IQR <= v <= Q3 + 1.5*IQR]
-    return np.mean(filtered) if filtered else np.median(vals)
-
-def get_past(date, pdf_indexed):
-    values = []
-    for y in range(1974, 2025):
-        try:
-            values.append(pdf_indexed.loc[date.replace(year=y), "temperature_2m"])
-        except KeyError:
-            continue
-    return robust_mean(values)
+    q1, q3 = np.percentile(vals, [25, 75])
+    iqr = q3 - q1
+    filt = [v for v in vals if q1 - 1.5*iqr <= v <= q3 + 1.5*iqr]
+    return np.mean(filt) if filt else np.median(vals)
 
 # --- FUNZIONI GRAFICI ---
 def create_mid_graph(df, combined_data):
     fig = go.Figure()
     colors = qualitative.Light24
     for idx, col in enumerate(combined_data.columns[1:]):
-        fig.add_trace(go.Scatter(
-            x=df["time"], y=combined_data[col],
-            mode="lines", name=col,
-            line=dict(width=1.5, color=colors[idx % len(colors)], dash="solid")
-        ))
-    tickvals = [t for t in df["time"] if t.hour == 0]
+        fig.add_trace(go.Scatter(x=df["time"], y=combined_data[col], mode="lines", name=col, line=dict(width=1.5,color=colors[idx%len(colors)])))
+    tickvals = [t for t in df["time"] if t.hour==0]
     fig.update_xaxes(tickvals=tickvals, tickformat="%a %d-%m")
-    for t in df["time"]:
-        if t.hour == 0:
-            fig.add_vline(x=t, line_width=2, line_dash="solid", line_color="white")
-        elif t.hour == 12:
-            fig.add_vline(x=t, line_width=1.5, line_dash="solid", line_color="rgba(130,130,130,0.5)")
     fig.update_layout(template="plotly_dark", hovermode="x unified", height=650, xaxis_title=X_AXIS_TITLE)
     return fig
 
-def get_series(df, serie_index, current_combined_means):
-    """Crea il grafico di una singola serie."""
+def get_series(df, serie_index, combined_means, pdf_indexed=None):
     valid_fields = [f"{field_names[serie_index]}{src}" for src in source_names if f"{field_names[serie_index]}{src}" in df.columns and df[f"{field_names[serie_index]}{src}"].notna().any()]
     past_values = None
-    if serie_index == 0:
-        with open("historical.json", "r", encoding="utf_8") as pf:
-            pdf = pd.DataFrame(json.load(pf)["hourly"])
-            pdf["time"] = pd.to_datetime(pdf["time"], utc=True).dt.tz_convert("Europe/Rome")
-            pdf.set_index("time", inplace=True)  # <- indicizzazione qui
-            past_values = [get_past(d, pdf) for d in df["time"]]
-            current_combined_means[PAST_MEAN_LABEL] = past_values
+    if serie_index==0 and pdf_indexed is not None:
+        df['date_key'] = df['time'].dt.strftime("%m-%d %H:%M")
+        past_values = df['date_key'].map(lambda x: robust_mean(pdf_indexed.loc[x].values) if x in pdf_indexed.index else np.nan)
+        combined_means[PAST_MEAN_LABEL] = past_values
     if valid_fields:
         df["mean"] = df[valid_fields].apply(robust_mean, axis=1)
-        current_combined_means[serie_names_it[serie_index]] = df["mean"].copy()
+        combined_means[serie_names_it[serie_index]] = df["mean"]
     fig = go.Figure()
-    if past_values:
-        df["past"] = past_values
-        fig.add_trace(go.Scatter(x=df["time"], y=df["past"], mode="lines", name=PAST_MEAN_LABEL, line=dict(width=1.5, dash="longdash", color="red")))
+    if past_values is not None:
+        fig.add_trace(go.Scatter(x=df["time"], y=past_values, mode="lines", name=PAST_MEAN_LABEL, line=dict(width=1.5,dash="longdash", color="red")))
     for f in valid_fields:
         fig.add_trace(go.Scatter(x=df["time"], y=df[f], mode="lines", name=f.replace(field_names[serie_index], ""), line=dict(width=1.5)))
     if valid_fields:
-        fig.add_trace(go.Scatter(x=df["time"], y=df["mean"], mode="lines", name=serie_names_it[serie_index], line=dict(width=3, dash="solid", color="blue")))
+        fig.add_trace(go.Scatter(x=df["time"], y=df["mean"], mode="lines", name=serie_names_it[serie_index], line=dict(width=3,color="blue")))
     return fig
 
 def create_final_html(content, title, timestamp_html):
@@ -117,7 +87,7 @@ def create_final_html(content, title, timestamp_html):
 </body>
 </html>"""
 
-# --- FUNZIONE PRINCIPALE ---
+# --- GENERAZIONE PAGINE ---
 def generate_forecast_pages(folder_name, latitude, longitude):
     os.makedirs(folder_name, exist_ok=True)
     json_path = os.path.join(folder_name, "open-meteo.json")
@@ -127,36 +97,47 @@ def generate_forecast_pages(folder_name, latitude, longitude):
     df = pd.DataFrame(data["hourly"])
     df["time"] = pd.to_datetime(df["time"], utc=True).dt.tz_convert("Europe/Rome")
     unique_days = df["time"].dt.date.unique()
+
+    # Preprocess storico
+    with open("historical.json", "r", encoding="utf_8") as pf:
+        pdf = pd.DataFrame(json.load(pf)["hourly"])
+    pdf["time"] = pd.to_datetime(pdf["time"], utc=True).dt.tz_convert("Europe/Rome")
+    pdf["date_key"] = pdf["time"].dt.strftime("%m-%d %H:%M")
+    pdf_indexed = pdf.pivot_table(index="date_key", values="temperature_2m", aggfunc=list)
+
     timestamp_html = f'<div style="position:fixed;bottom:5px;right:10px;font-size:0.7em;color:#999;">Ultimo aggiornamento: {datetime.now().strftime("%d-%m-%Y %H:%M:%S")}</div>'
+    
+    # Main page
     combined_means_main = {}
-    figs_combined = [get_series(df, i, combined_means_main) for i in range(len(field_names))]
+    figs_combined = [get_series(df, i, combined_means_main, pdf_indexed if i==0 else None) for i in range(len(field_names))]
     combined_df_main = pd.DataFrame({"time": df["time"]})
-    for k, v in combined_means_main.items():
+    for k,v in combined_means_main.items():
         combined_df_main[k] = v
+
     html_content_main = f"<h1>{TITLE_MAIN} - {folder_name.upper()}</h1>"
     html_content_main += pio.to_html(create_mid_graph(df, combined_df_main), full_html=False, include_plotlyjs='cdn')
     html_content_main += f"<h1>{TITLE_DETAIL}</h1>"
     for fig in figs_combined:
         html_content_main += pio.to_html(fig, full_html=False, include_plotlyjs=False)
-    final_html_main = create_final_html(html_content_main, f"Meteo Forecast - {folder_name.upper()}", timestamp_html)
-    with open(os.path.join(folder_name, "index.html"), "w", encoding="utf-8") as f:
-        f.write(final_html_main)
-    # Pagine giornaliere
+
+    with open(os.path.join(folder_name,"index.html"),"w",encoding="utf-8") as f:
+        f.write(create_final_html(html_content_main, f"Meteo Forecast - {folder_name.upper()}", timestamp_html))
+
+    # Daily pages
     for idx, day in enumerate(unique_days):
-        daily_df = df[df["time"].dt.date == day].copy()
+        daily_df = df[df["time"].dt.date==day].copy()
         combined_means_daily = {}
-        figs_daily = [get_series(daily_df, i, combined_means_daily) for i in range(len(field_names))]
+        figs_daily = [get_series(daily_df, i, combined_means_daily, pdf_indexed if i==0 else None) for i in range(len(field_names))]
         daily_combined_df = pd.DataFrame({"time": daily_df["time"]})
-        for k, v in combined_means_daily.items():
+        for k,v in combined_means_daily.items():
             daily_combined_df[k] = v
         day_name_it = DAY_NAMES_IT.get(day.strftime("%A"), day.strftime("%A"))
         html_content_daily = f"<h1>Previsioni Dettagliate per {day_name_it} {day.strftime('%d-%m')}</h1>"
         html_content_daily += pio.to_html(create_mid_graph(daily_df, daily_combined_df), full_html=False, include_plotlyjs='cdn')
         for fig in figs_daily:
             html_content_daily += pio.to_html(fig, full_html=False, include_plotlyjs=False)
-        final_html_daily = create_final_html(html_content_daily, f"Meteo Forecast - {folder_name.upper()} - {day_name_it}", timestamp_html)
-        with open(os.path.join(folder_name, f"{idx}.html"), "w", encoding="utf-8") as f:
-            f.write(final_html_daily)
+        with open(os.path.join(folder_name,f"{idx}.html"),"w",encoding="utf-8") as f:
+            f.write(create_final_html(html_content_daily, f"Meteo Forecast - {folder_name.upper()} - {day_name_it}", timestamp_html))
 
 # --- ESECUZIONE ---
 if __name__ == "__main__":
