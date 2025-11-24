@@ -66,29 +66,55 @@ def create_mid_graph(df, combined_data):
     return fig
 
 def get_series(df, serie_index, combined_means, pdf_indexed=None):
-    valid_fields = [f"{field_names[serie_index]}{src}" for src in source_names
-                    if f"{field_names[serie_index]}{src}" in df.columns and df[f"{field_names[serie_index]}{src}"].notna().any()]
+    valid_fields = [
+        f"{field_names[serie_index]}{src}" 
+        for src in source_names 
+        if f"{field_names[serie_index]}{src}" in df.columns and df[f"{field_names[serie_index]}{src}"].notna().any()
+    ]
+
     past_values = None
-    if serie_index==0 and pdf_indexed is not None:
+    if serie_index == 0 and pdf_indexed is not None:
+        # chiave per mappare ora e giorno ignorando l'anno
         df['month_day_hour'] = df['time'].dt.strftime("%m-%d %H:%M")
-        past_values = df['month_day_hour'].map(
-            lambda x: robust_mean([v for sublist in pdf_indexed.loc[x] for v in sublist])
-            if x in pdf_indexed.index else np.nan
-        )
+        # map robust mean sui dati storici
+        def get_historical_mean(key):
+            if key not in pdf_indexed.index:
+                return np.nan
+            row = pdf_indexed.loc[key]
+            all_vals = []
+            for val in row:
+                if isinstance(val, list):
+                    all_vals.extend(val)
+                elif not pd.isna(val):
+                    all_vals.append(val)
+            return robust_mean(all_vals) if all_vals else np.nan
+
+        past_values = df['month_day_hour'].map(get_historical_mean)
         combined_means[PAST_MEAN_LABEL] = past_values
+
     if valid_fields:
-        df["mean"] = df[valid_fields].apply(robust_mean,axis=1)
+        df["mean"] = df[valid_fields].apply(robust_mean, axis=1)
         combined_means[serie_names_it[serie_index]] = df["mean"]
+
     fig = go.Figure()
     if past_values is not None:
-        fig.add_trace(go.Scatter(x=df["time"],y=past_values,mode="lines",
-                                 name=PAST_MEAN_LABEL,line=dict(width=1.5,dash="longdash",color="red")))
+        fig.add_trace(go.Scatter(
+            x=df["time"], y=past_values, mode="lines", name=PAST_MEAN_LABEL,
+            line=dict(width=1.5, dash="longdash", color="red")
+        ))
+
     for f in valid_fields:
-        fig.add_trace(go.Scatter(x=df["time"],y=df[f],mode="lines",
-                                 name=f.replace(field_names[serie_index],""),line=dict(width=1.5)))
+        fig.add_trace(go.Scatter(
+            x=df["time"], y=df[f], mode="lines", name=f.replace(field_names[serie_index], ""),
+            line=dict(width=1.5)
+        ))
+
     if valid_fields:
-        fig.add_trace(go.Scatter(x=df["time"],y=df["mean"],mode="lines",
-                                 name=serie_names_it[serie_index],line=dict(width=3,color="blue")))
+        fig.add_trace(go.Scatter(
+            x=df["time"], y=df["mean"], mode="lines", name=serie_names_it[serie_index],
+            line=dict(width=3, color="blue")
+        ))
+
     return fig
 
 def create_final_html(content,title,timestamp_html):
