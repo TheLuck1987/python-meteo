@@ -1,0 +1,39 @@
+name: Generate and Publish Page
+
+on:
+ # 1. Trigger manuale (se vuoi avviarla tu dalla tab Actions)
+  workflow_dispatch:
+  
+  # 2. Trigger ogni volta che c'è un push sul branch 'main'
+  push:
+    branches: [ main ]
+    
+  # 3. Trigger programmato (la novità)
+  schedule:
+    # Esegue l'azione all'inizio di ogni ora (es. 00:00, 01:00, 02:00, etc.)
+    # Sintassi: minuto ora giorno_del_mese mese giorno_della_settimana
+    # * * * * *
+    - cron: '59 * * * *'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Execute Python Script
+        run: python spagetti.py
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          # Il file 'index.html' generato da Python
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .
+          keep_files: true
