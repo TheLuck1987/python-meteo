@@ -51,14 +51,13 @@ def robust_mean(row):
     filtered = [v for v in vals if Q1 - 1.5*IQR <= v <= Q3 + 1.5*IQR]
     return np.mean(filtered) if filtered else np.median(vals)
 
-def get_past(date, pdf):
-    """Ritorna la media storica 1974-2024 della temperatura."""
+def get_past(date, pdf_indexed):
     values = []
     for y in range(1974, 2025):
-        var_date = date.replace(year=y)
-        match = pdf.loc[pdf["time"] == var_date, "temperature_2m"]
-        if not match.empty:
-            values.append(match.iloc[0])
+        try:
+            values.append(pdf_indexed.loc[date.replace(year=y), "temperature_2m"])
+        except KeyError:
+            continue
     return robust_mean(values)
 
 # --- FUNZIONI GRAFICI ---
@@ -89,6 +88,7 @@ def get_series(df, serie_index, current_combined_means):
         with open("historical.json", "r", encoding="utf_8") as pf:
             pdf = pd.DataFrame(json.load(pf)["hourly"])
             pdf["time"] = pd.to_datetime(pdf["time"], utc=True).dt.tz_convert("Europe/Rome")
+            pdf.set_index("time", inplace=True)  # <- indicizzazione qui
             past_values = [get_past(d, pdf) for d in df["time"]]
             current_combined_means[PAST_MEAN_LABEL] = past_values
     if valid_fields:
