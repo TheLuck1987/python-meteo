@@ -50,10 +50,10 @@ def robust_mean(row):
     else:
         vals = row.dropna().values
     if len(vals) == 0:
-        return np.nan        
+        return np.nan    
     Q1 = np.percentile(vals, 25)
     Q3 = np.percentile(vals, 75)
-    IQR = Q3 - Q1        
+    IQR = Q3 - Q1    
     lower_fence = Q1 - 1.5 * IQR
     upper_fence = Q3 + 1.5 * IQR
     filtered = [v for v in vals if lower_fence <= v <= upper_fence]
@@ -108,9 +108,9 @@ def create_mid_graph(df, combined_data):
         ),
         hovermode="x unified",
         height=650
-    )    
+    )  
     
-    tickvals = [t for t in df["time"] if t.hour == 0]    
+    tickvals = [t for t in df["time"] if t.hour == 0]  
     fig.update_xaxes(
         ticklabelmode= "period", 
         minor=dict(ticks="inside", showgrid=True, dtick=60*60*1000, tick0=df["time"].min(), griddash='dot', gridcolor='rgba(50,50,50,0.5)'),
@@ -120,12 +120,12 @@ def create_mid_graph(df, combined_data):
         tickvals=tickvals,
         tickformat="%a %d-%m",
         hoverformat="%a %d-%m %H:%M"
-    )    
+    )  
     for t in df["time"]:
         if t.hour == 0:
             fig.add_vline(x=t, line_width=2, line_dash="solid", line_color="white")
         elif t.hour == 12:
-            fig.add_vline(x=t, line_width=1.5, line_dash="solid", line_color="rgba(130,130,130,0.5)")        
+            fig.add_vline(x=t, line_width=1.5, line_dash="solid", line_color="rgba(130,130,130,0.5)")    
     return fig
 
 def get_series(df, serie_index, current_combined_means): 
@@ -134,13 +134,13 @@ def get_series(df, serie_index, current_combined_means):
         temp_fields = []
         for i in range(len(friendly_sources)):
             temp_fields.append(field_names[index] + source_names[i])
-        return [f for f in temp_fields if f in df.columns and df[f].notna().any()]         
+        return [f for f in temp_fields if f in df.columns and df[f].notna().any()]     
     
     def rename_serie(field_index, field) -> str:
         index = source_names.index(field.replace(field_names[field_index], ""))
-        return friendly_sources[index]        
+        return friendly_sources[index]    
         
-    valid_fields = valid_field_names(serie_index)    
+    valid_fields = valid_field_names(serie_index)  
     past_values = None
     
     if serie_index == 0:
@@ -166,7 +166,7 @@ def get_series(df, serie_index, current_combined_means):
             mode="lines", name=PAST_MEAN_LABEL,
             line=dict(width=1.5, dash="longdash", color="red"),
             visible=True 
-        ))            
+        ))      
         
     for i in range(len(valid_fields)):
         fig.add_trace(go.Scatter(
@@ -174,7 +174,7 @@ def get_series(df, serie_index, current_combined_means):
             mode="lines", name=rename_serie(serie_index, valid_fields[i]),
             line=dict(width=1.5),
             visible=True 
-        ))        
+        ))    
         
     if valid_fields:
         fig.add_trace(go.Scatter(
@@ -182,7 +182,7 @@ def get_series(df, serie_index, current_combined_means):
             mode="lines", name=serie_names_it[serie_index], 
             line=dict(width=3, dash="solid", color="blue"),
             visible=True 
-        ))     
+        ))   
         
     fig.update_layout(
         title=titles_it[serie_index], 
@@ -196,9 +196,9 @@ def get_series(df, serie_index, current_combined_means):
         ),
         hovermode="x unified",
         height=400
-    )    
+    )  
     
-    tickvals = [t for t in df["time"] if t.hour == 0]    
+    tickvals = [t for t in df["time"] if t.hour == 0]  
     fig.update_xaxes(
         ticklabelmode= "period", 
         minor=dict(ticks="inside", showgrid=True, dtick=60*60*1000, tick0=df["time"].min(), griddash='dot', gridcolor='rgba(50,50,50,0.5)'),
@@ -208,12 +208,12 @@ def get_series(df, serie_index, current_combined_means):
         tickvals=tickvals,
         tickformat="%a %d-%m",
         hoverformat="%a %d-%m %H:%M"
-    )    
+    )  
     for t in df["time"]:
         if t.hour == 0:
             fig.add_vline(x=t, line_width=2, line_dash="solid", line_color="white")
         elif t.hour == 12:
-            fig.add_vline(x=t, line_width=1.5, line_dash="solid", line_color="rgba(130,130,130,0.5)")  
+            fig.add_vline(x=t, line_width=1.5, line_dash="solid", line_color="rgba(130,130,130,0.5)") 
     return fig
 
 def create_final_html(content, title):
@@ -262,7 +262,7 @@ def create_final_html(content, title):
 get_data()
 
 with open("open-meteo.json", "r", encoding="utf_8") as f:
-    data = json.load(f)    
+    data = json.load(f)  
 df = pd.DataFrame(data["hourly"])
 df["time"] = pd.to_datetime(df["time"], utc=True).dt.tz_convert("Europe/Rome")
 df = df[df['time'] >= df.iloc[0]['time'].normalize() + pd.Timedelta(hours=datetime.now().hour)]
