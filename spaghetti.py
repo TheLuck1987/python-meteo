@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.graph_objs as go
 import plotly.io as pio
 import requests
-import os # Importato per gestire le cartelle e i percorsi
+import os 
 
 from datetime import datetime
 from plotly.colors import qualitative
@@ -72,6 +72,7 @@ def robust_mean(row):
     return np.mean(filtered)
 
 def get_past(date, pdf):
+    """Calcola la media storica robusta per un dato punto temporale."""
     values = []
     for y in range(1974, 2025):
         var_date = date.replace(year = y)
@@ -137,8 +138,8 @@ def create_mid_graph(df, combined_data):
             fig.add_vline(x=t, line_width=1.5, line_dash="solid", line_color="rgba(130,130,130,0.5)")    
     return fig
 
-def get_series(df, serie_index, current_combined_means): 
-    """Crea il grafico di una singola serie e alimenta i dati medi nel dizionario locale"""
+def get_series(df, serie_index, current_combined_means, pdf_past, past_values_cache): 
+    """Crea il grafico di una singola serie. Accetta il PDF storico e la cache."""
     def valid_field_names(index):
         temp_fields = []
         for i in range(len(friendly_sources)):
@@ -153,14 +154,20 @@ def get_series(df, serie_index, current_combined_means):
     past_values = None
     
     if serie_index == 0:
-        # Assumiamo che historical.json sia sempre nella directory radice
-        with open("historical.json", "r", encoding="utf_8") as pf: 
-            past_data = json.load(pf)
-        pdf = pd.DataFrame(past_data["hourly"])
-        pdf["time"] = pd.to_datetime(pdf["time"], utc=True).dt.tz_convert("Europe/Rome")
-        past_values = []
-        for d in df["time"]:
-            past_values.append(get_past(d, pdf))
+        # TENTA IL RECUPERO DALLA CACHE
+        cache_key = tuple(df["time"].dt.strftime('%Y-%m-%d %H:%M').tolist())
+        
+        if cache_key in past_values_cache:
+            # Recupero immediato dalla cache (Veloce!)
+            past_values = past_values_cache[cache_key]
+        else:
+            # Calcolo pesante solo se non in cache
+            past_values = []
+            for d in df["time"]:
+                past_values.append(get_past(d, pdf_past)) # Usa PDF pre-caricato
+            # Salva il risultato nella cache
+            past_values_cache[cache_key] = past_values
+            
         current_combined_means[PAST_MEAN_LABEL] = past_values.copy() 
         
     if valid_fields:
@@ -258,6 +265,8 @@ def create_final_html(content, title, timestamp_html):
         h2 {{ color: #777; border-bottom: 1px solid #777; max-width: calc(100% - 20px); overflow: hidden; padding: 10px; }}
         .day-link {{ color: #4CAF50; margin-right: 20px; font-size: 1.1em; text-decoration: none; }}
         .day-link:hover {{ text-decoration: underline; }}
+        /* Stile per il timestamp */
+        .timestamp {{ position: fixed; bottom: 5px; right: 10px; font-size: 0.7em; color: #999; z-index: 1000; }}
     </style>
 </head>
 <body>
@@ -270,7 +279,7 @@ def create_final_html(content, title, timestamp_html):
 
 # --- FUNZIONE PRINCIPALE DI ELABORAZIONE ---
 
-def generate_forecast_pages(folder_name, latitude, longitude):
+def generate_forecast_pages(folder_name, latitude, longitude, pdf_past, past_values_cache):
     """Esegue l'intero processo di generazione per una singola posizione."""
     
     print(f"--- Elaborazione iniziata per la cartella: {folder_name} ---")
@@ -282,7 +291,7 @@ def generate_forecast_pages(folder_name, latitude, longitude):
     
     # Genera il timestamp di elaborazione
     now = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-    timestamp_html = f'<div style="position: fixed; bottom: 5px; right: 10px; font-size: 0.7em; color: #999; z-index: 1000;">Ultimo aggiornamento: {now}</div>'
+    timestamp_html = f'<div class="timestamp">Ultimo aggiornamento: {now}</div>'
 
     # 2. Caricamento e preparazione dati
     with open(json_path, "r", encoding="utf_8") as f:
@@ -297,8 +306,9 @@ def generate_forecast_pages(folder_name, latitude, longitude):
     combined_means_main = {}
     figs_combined = []
 
+    # PASSA LA CACHE E PDF_PAST
     for i in range(len(field_names)):
-        figs_combined.append(get_series(df, i, combined_means_main)) 
+        figs_combined.append(get_series(df, i, combined_means_main, pdf_past, past_values_cache)) 
 
     combined_df_main = pd.DataFrame({"time": df["time"]})
     for k, v in combined_means_main.items():
@@ -340,7 +350,8 @@ def generate_forecast_pages(folder_name, latitude, longitude):
         figs_daily = []
         
         for i in range(len(field_names)):
-            figs_daily.append(get_series(daily_df, i, combined_means_daily))
+            # PASSA LA CACHE E PDF_PAST
+            figs_daily.append(get_series(daily_df, i, combined_means_daily, pdf_past, past_values_cache))
 
         daily_combined_df = pd.DataFrame({"time": daily_df["time"]})
         for k, v in combined_means_daily.items():
@@ -374,8 +385,22 @@ def generate_forecast_pages(folder_name, latitude, longitude):
     print(f"--- Elaborazione completata per la cartella: {folder_name} ---\n")
 
 
-# --- ESECUZIONE GLOBALE ---
+# --- ESECUZIONE GLOBALE (con pre-caricamento e caching) ---
 
 if __name__ == "__main__":
+    
+    # 1. PRE-CARICAMENTO DATI STORICI (Eseguito UNA SOLA VOLTA)
+    print("Pre-caricamento dati storici (historical.json)...")
+    with open("historical.json", "r", encoding="utf_8") as pf:
+        past_data = json.load(pf)
+    PDF_PAST = pd.DataFrame(past_data["hourly"])
+    PDF_PAST["time"] = pd.to_datetime(PDF_PAST["time"], utc=True).dt.tz_convert("Europe/Rome")
+    print("Pre-caricamento completato.")
+    
+    # Dizionario per la cache dei risultati (Eseguito UNA SOLA VOLTA)
+    PAST_VALUES_CACHE = {}
+
+    # 2. ESECUZIONE PER OGNI POSIZIONE
     for folder, config in LOCATIONS.items():
-        generate_forecast_pages(folder, config["lat"], config["lon"])
+        # Passiamo lo stesso PDF pre-caricato e la stessa cache a tutte le chiamate
+        generate_forecast_pages(folder, config["lat"], config["lon"], PDF_PAST, PAST_VALUES_CACHE)
