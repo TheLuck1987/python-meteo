@@ -336,10 +336,10 @@ def generate_forecast_pages(folder_name, latitude, longitude, historical_lookup)
     html_content_main += link_html 
 
     combined_fig = create_mid_graph(df, combined_df_main) 
-    html_content_main += pio.to_html(combined_fig, full_html=False, include_plotlyjs='cdn')
+    html_content_main += pio.to_html(combined_fig, full_html=False, include_plotlyjs='cdn', config={ "displayModeBar": False, "scrollZoom": False, "doubleClick": False })
     html_content_main += f"<h1 style='padding-top: 30px;'>{TITLE_DETAIL}</h1>"
     for i in range(len(figs_combined)):
-        html_content_main += pio.to_html(figs_combined[i], full_html=False, include_plotlyjs=False)
+        html_content_main += pio.to_html(figs_combined[i], full_html=False, include_plotlyjs=False, config={ "displayModeBar": False, "scrollZoom": False, "doubleClick": False })
 
     # SALVATAGGIO PAGINA PRINCIPALE
     final_html_main = create_final_html(html_content_main, f"Meteo Forecast - {folder_name.upper()} - Tutti i Giorni", timestamp_html)
@@ -370,11 +370,11 @@ def generate_forecast_pages(folder_name, latitude, longitude, historical_lookup)
         html_content_daily += f"<p style='padding: 10px;'><a href='index.html' class='day-link'>← Torna alla panoramica 7 giorni</a></p>"
 
         combined_daily_fig = create_mid_graph(daily_df, daily_combined_df) 
-        html_content_daily += pio.to_html(combined_daily_fig, full_html=False, include_plotlyjs='cdn')
+        html_content_daily += pio.to_html(combined_daily_fig, full_html=False, include_plotlyjs='cdn', config={ "displayModeBar": False, "scrollZoom": False, "doubleClick": False })
         
         html_content_daily += f"<h2 style='padding-top: 30px;'>Dettagli Modelli</h2>"
         for i in range(len(figs_daily)):
-            html_content_daily += pio.to_html(figs_daily[i], full_html=False, include_plotlyjs=False)
+            html_content_daily += pio.to_html(figs_daily[i], full_html=False, include_plotlyjs=False, config={ "displayModeBar": False, "scrollZoom": False, "doubleClick": False })
 
         # SALVATAGGIO PAGINA GIORNALIERA (0.html, 1.html, ...)
         filename = f"{idx}.html"
