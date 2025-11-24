@@ -45,14 +45,15 @@ PAST_MEAN_LABEL = "MEDIA 50 ANNI"
 
 # --- FUNZIONI DI UTILITÀ ---
 
-def get_data(latitude, longitude, local_path):
+def get_data(latitude, longitude):#, local_path):
     """Scarica i dati meteo per le coordinate e salva nel percorso specificato."""
     url = f"https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&daily=wind_direction_10m_dominant&hourly=temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,precipitation_probability,precipitation,cloud_cover,wind_speed_10m,wind_gusts_10m,wind_direction_10m,surface_pressure,cape,snowfall,showers,rain&models=ecmwf_ifs025,icon_d2,gfs_global,ecmwf_ifs,icon_global,gem_regional,knmi_harmonie_arome_europe,dmi_harmonie_arome_europe,meteofrance_arpege_europe,italia_meteo_arpae_icon_2i,bom_access_global,cma_grapes_global"
-    response = requests.get(url, stream=True)
+    response = requests.get(url)#, stream=True)
     response.raise_for_status()
-    with open(local_path, 'wb') as f:
-        for chunk in response.iter_content(chunk_size=8192):
-            f.write(chunk)
+    return response.json()
+    # with open(local_path, 'wb') as f:
+    #     for chunk in response.iter_content(chunk_size=8192):
+    #         f.write(chunk)
 
 def robust_mean(row):
     """Calcola la media robusta (eliminando gli outlier IQR) su una serie di valori."""
@@ -286,20 +287,22 @@ def generate_forecast_pages(folder_name, latitude, longitude, historical_lookup)
     print(f"--- Elaborazione iniziata per la cartella: {folder_name} ---")
 
     # 1. Creazione della cartella e download dati
-    os.makedirs(folder_name, exist_ok=True)
-    json_path = os.path.join(folder_name, "open-meteo.json")
-    get_data(latitude, longitude, json_path)
+    # os.makedirs(folder_name, exist_ok=True)
+    # json_path = os.path.join(folder_name, "open-meteo.json")
+    # get_data(latitude, longitude, json_path)
     
     # Genera il timestamp di elaborazione
     now = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
     timestamp_html = f'<div class="timestamp">Ultimo aggiornamento: {now}</div>'
 
     # 2. Caricamento e preparazione dati
-    with open(json_path, "r", encoding="utf_8") as f:
-        data = json.load(f)
+    # with open(json_path, "r", encoding="utf_8") as f:
+    #     data = json.load(f)
+    data = get_data(latitude, longitude)
     df = pd.DataFrame(data["hourly"])
     df["time"] = pd.to_datetime(df["time"], utc=True).dt.tz_convert("Europe/Rome")
-    df = df[df['time'] >= df.iloc[0]['time'].normalize() + pd.Timedelta(hours=datetime.now().hour)]
+    #df = df[df['time'] >= df.iloc[0]['time'].normalize() + pd.Timedelta(hours=datetime.now().hour)]
+    df = df[df['time'] >= df['time'].iloc[0].normalize() + pd.Timedelta(hours=df['time'].iloc[0].hour)]
     unique_days = df["time"].dt.date.unique()
 
     # --- GENERAZIONE PAGINA PRINCIPALE (index.html: TUTTI I GIORNI) ---
