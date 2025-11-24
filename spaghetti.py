@@ -4,10 +4,20 @@ import pandas as pd
 import plotly.graph_objs as go
 import plotly.io as pio
 import requests
+import os # Importato per gestire le cartelle e i percorsi
 
 from datetime import datetime
 from plotly.colors import qualitative
 from plotly.subplots import make_subplots
+
+# --- CONFIGURAZIONE POSIZIONI ---
+
+LOCATIONS = {
+    "home": {"lat": 45.7256, "lon": 12.6897},
+    "cs": {"lat": 45.7585, "lon": 12.8447},
+    "rugby": {"lat": 45.6956, "lon": 12.7102}
+}
+
 
 # --- COSTANTI E TRADUZIONI ---
 
@@ -35,9 +45,9 @@ PAST_MEAN_LABEL = "MEDIA 50 ANNI"
 
 # --- FUNZIONI DI BASE ---
 
-def get_data():
-    url = "https://api.open-meteo.com/v1/forecast?latitude=45.7256&longitude=12.6897&daily=wind_direction_10m_dominant&hourly=temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,precipitation_probability,precipitation,cloud_cover,wind_speed_10m,wind_gusts_10m,wind_direction_10m,surface_pressure,cape,snowfall,showers,rain&models=ecmwf_ifs025,icon_d2,gfs_global,ecmwf_ifs,icon_global,gem_regional,knmi_harmonie_arome_europe,dmi_harmonie_arome_europe,meteofrance_arpege_europe,italia_meteo_arpae_icon_2i,bom_access_global,cma_grapes_global"
-    local_path = "open-meteo.json"
+def get_data(latitude, longitude, local_path):
+    """Scarica i dati meteo per le coordinate e salva nel percorso specificato."""
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&daily=wind_direction_10m_dominant&hourly=temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,precipitation_probability,precipitation,cloud_cover,wind_speed_10m,wind_gusts_10m,wind_direction_10m,surface_pressure,cape,snowfall,showers,rain&models=ecmwf_ifs025,icon_d2,gfs_global,ecmwf_ifs,icon_global,gem_regional,knmi_harmonie_arome_europe,dmi_harmonie_arome_europe,meteofrance_arpege_europe,italia_meteo_arpae_icon_2i,bom_access_global,cma_grapes_global"
     response = requests.get(url, stream=True)
     response.raise_for_status()
     with open(local_path, 'wb') as f:
@@ -73,7 +83,6 @@ def get_past(date, pdf):
 # --- FUNZIONI DI GENERAZIONE GRAFICI E HTML ---
 
 def create_mid_graph(df, combined_data): 
-    """Crea il grafico principale combinato (Mean/Past/Selected Models)"""
     fig = go.Figure()
     colors = qualitative.Light24
     
@@ -84,7 +93,7 @@ def create_mid_graph(df, combined_data):
             return "legendonly"
             
     def is_dashed(idx):
-        if idx == 0: # Media storica
+        if idx == 0:
             return "longdash"
         else:
             return "solid"
@@ -144,7 +153,8 @@ def get_series(df, serie_index, current_combined_means):
     past_values = None
     
     if serie_index == 0:
-        with open("historical.json", "r", encoding="utf_8") as pf:
+        # Assumiamo che historical.json sia sempre nella directory radice
+        with open("historical.json", "r", encoding="utf_8") as pf: 
             past_data = json.load(pf)
         pdf = pd.DataFrame(past_data["hourly"])
         pdf["time"] = pd.to_datetime(pdf["time"], utc=True).dt.tz_convert("Europe/Rome")
@@ -216,8 +226,8 @@ def get_series(df, serie_index, current_combined_means):
             fig.add_vline(x=t, line_width=1.5, line_dash="solid", line_color="rgba(130,130,130,0.5)") 
     return fig
 
-def create_final_html(content, title):
-    """Genera la struttura HTML completa con header, CSS e script di refresh"""
+def create_final_html(content, title, timestamp_html):
+    """Genera la struttura HTML completa con header, CSS, script di refresh e timestamp."""
     return f"""
 <!DOCTYPE html>
 <html lang="it">
@@ -252,106 +262,120 @@ def create_final_html(content, title):
 </head>
 <body>
 {content}
+{timestamp_html} 
 <script>setPageRefresh()</script>
 </body>
 </html>
 """
 
-# --- ESECUZIONE PRINCIPALE ---
+# --- FUNZIONE PRINCIPALE DI ELABORAZIONE ---
 
-get_data()
-
-with open("open-meteo.json", "r", encoding="utf_8") as f:
-    data = json.load(f)  
-df = pd.DataFrame(data["hourly"])
-df["time"] = pd.to_datetime(df["time"], utc=True).dt.tz_convert("Europe/Rome")
-df = df[df['time'] >= df.iloc[0]['time'].normalize() + pd.Timedelta(hours=datetime.now().hour)]
-
-# Ottieni la lista dei giorni unici nel DataFrame
-unique_days = df["time"].dt.date.unique()
-
-# --- GENERAZIONE PAGINA PRINCIPALE (index.html: TUTTI I GIORNI) ---
-
-combined_means_main = {}
-figs_combined = []
-
-for i in range(len(field_names)):
-    figs_combined.append(get_series(df, i, combined_means_main)) 
-
-# Crea il DataFrame combinato per la pagina principale
-combined_df_main = pd.DataFrame({"time": df["time"]})
-for k, v in combined_means_main.items():
-    combined_df_main[k] = v
-
-# --- CREAZIONE LINK DI NAVIGAZIONE (con nomi file semplificati e tradotti) ---
-link_html = "<h1 style='padding-top: 30px;'>Navigazione Giornaliera</h1>"
-link_html += "<div style='padding: 10px;'>"
-for idx, day in enumerate(unique_days):
-    # Ottieni il nome del giorno in inglese e traducilo
-    day_name_en = day.strftime("%A")
-    day_name_it = DAY_NAMES_IT.get(day_name_en, day_name_en)
+def generate_forecast_pages(folder_name, latitude, longitude):
+    """Esegue l'intero processo di generazione per una singola posizione."""
     
-    # Crea il nome del file semplificato (0.html, 1.html, ...)
-    filename = f"{idx}.html"
+    print(f"--- Elaborazione iniziata per la cartella: {folder_name} ---")
+
+    # 1. Creazione della cartella e download dati
+    os.makedirs(folder_name, exist_ok=True)
+    json_path = os.path.join(folder_name, "open-meteo.json")
+    get_data(latitude, longitude, json_path)
     
-    # Formatta l'etichetta tradotta
-    link_label = f"{day_name_it} {day.strftime('%d-%m')}"
-    
-    link_html += f"<a href='{filename}' class='day-link'>{link_label}</a>"
-link_html += "</div>"
-# --- FINE CREAZIONE LINK ---
+    # Genera il timestamp di elaborazione
+    now = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+    timestamp_html = f'<div style="position: fixed; bottom: 5px; right: 10px; font-size: 0.7em; color: #999; z-index: 1000;">Ultimo aggiornamento: {now}</div>'
 
+    # 2. Caricamento e preparazione dati
+    with open(json_path, "r", encoding="utf_8") as f:
+        data = json.load(f)  
+    df = pd.DataFrame(data["hourly"])
+    df["time"] = pd.to_datetime(df["time"], utc=True).dt.tz_convert("Europe/Rome")
+    df = df[df['time'] >= df.iloc[0]['time'].normalize() + pd.Timedelta(hours=datetime.now().hour)]
+    unique_days = df["time"].dt.date.unique()
 
-html_content_main = f"<h1>{TITLE_MAIN}</h1>"
-html_content_main += link_html # INSERISCI I LINK QUI
+    # --- GENERAZIONE PAGINA PRINCIPALE (index.html: TUTTI I GIORNI) ---
 
-combined_fig = create_mid_graph(df, combined_df_main) 
-html_content_main += pio.to_html(combined_fig, full_html=False, include_plotlyjs='cdn')
-html_content_main += f"<h1 style='padding-top: 30px;'>{TITLE_DETAIL}</h1>"
-for i in range(len(figs_combined)):
-    html_content_main += pio.to_html(figs_combined[i], full_html=False, include_plotlyjs=False)
+    combined_means_main = {}
+    figs_combined = []
 
-# SALVATAGGIO PAGINA PRINCIPALE
-final_html_main = create_final_html(html_content_main, "Meteo Forecast - Tutti i Giorni")
-with open("index.html", "w", encoding="utf-8") as f:
-    f.write(final_html_main)
-
-# --- GENERAZIONE PAGINE GIORNALIERE (0.html, 1.html, ...) ---
-
-for idx, day in enumerate(unique_days):
-    daily_df = df[df["time"].dt.date == day].copy()
-    
-    combined_means_daily = {} 
-    figs_daily = []
-    
     for i in range(len(field_names)):
-        figs_daily.append(get_series(daily_df, i, combined_means_daily))
+        figs_combined.append(get_series(df, i, combined_means_main)) 
 
-    daily_combined_df = pd.DataFrame({"time": daily_df["time"]})
-    for k, v in combined_means_daily.items():
-        daily_combined_df[k] = v
+    combined_df_main = pd.DataFrame({"time": df["time"]})
+    for k, v in combined_means_main.items():
+        combined_df_main[k] = v
 
-    # Nome del giorno tradotto per il titolo
-    day_name_en = day.strftime("%A")
-    day_name_it = DAY_NAMES_IT.get(day_name_en, day_name_en)
-    
-    day_label_it = f"{day_name_it} {day.strftime('%d-%m')}"
-    
-    # Genera HTML
-    html_content_daily = f"<h1>Previsioni Dettagliate per {day_label_it}</h1>"
-    
-    # Aggiunge un link per tornare all'indice principale
-    html_content_daily += f"<p style='padding: 10px;'><a href='index.html' class='day-link'>← Torna alla panoramica 7 giorni</a></p>"
+    # --- CREAZIONE LINK DI NAVIGAZIONE ---
+    link_html = "<h1 style='padding-top: 30px;'>Navigazione Giornaliera</h1>"
+    link_html += "<div style='padding: 10px;'>"
+    for idx, day in enumerate(unique_days):
+        day_name_en = day.strftime("%A")
+        day_name_it = DAY_NAMES_IT.get(day_name_en, day_name_en)
+        filename = f"{idx}.html"
+        link_label = f"{day_name_it} {day.strftime('%d-%m')}"
+        link_html += f"<a href='{filename}' class='day-link'>{link_label}</a>"
+    link_html += "</div>"
+    # --- FINE CREAZIONE LINK ---
 
-    combined_daily_fig = create_mid_graph(daily_df, daily_combined_df) 
-    html_content_daily += pio.to_html(combined_daily_fig, full_html=False, include_plotlyjs='cdn')
-    
-    html_content_daily += f"<h2 style='padding-top: 30px;'>Dettagli Modelli</h2>"
-    for i in range(len(figs_daily)):
-        html_content_daily += pio.to_html(figs_daily[i], full_html=False, include_plotlyjs=False)
 
-    # SALVATAGGIO PAGINA GIORNALIERA (0.html, 1.html, ...)
-    filename = f"{idx}.html"
-    final_html_daily = create_final_html(html_content_daily, f"Meteo Forecast - {day_label_it}")
-    with open(filename, "w", encoding="utf-8") as f:
-        f.write(final_html_daily)
+    html_content_main = f"<h1>{TITLE_MAIN} - {folder_name.upper()}</h1>"
+    html_content_main += link_html 
+
+    combined_fig = create_mid_graph(df, combined_df_main) 
+    html_content_main += pio.to_html(combined_fig, full_html=False, include_plotlyjs='cdn')
+    html_content_main += f"<h1 style='padding-top: 30px;'>{TITLE_DETAIL}</h1>"
+    for i in range(len(figs_combined)):
+        html_content_main += pio.to_html(figs_combined[i], full_html=False, include_plotlyjs=False)
+
+    # SALVATAGGIO PAGINA PRINCIPALE
+    final_html_main = create_final_html(html_content_main, f"Meteo Forecast - {folder_name.upper()} - Tutti i Giorni", timestamp_html)
+    with open(os.path.join(folder_name, "index.html"), "w", encoding="utf-8") as f:
+        f.write(final_html_main)
+
+    # --- GENERAZIONE PAGINE GIORNALIERE (0.html, 1.html, ...) ---
+
+    for idx, day in enumerate(unique_days):
+        daily_df = df[df["time"].dt.date == day].copy()
+        
+        combined_means_daily = {} 
+        figs_daily = []
+        
+        for i in range(len(field_names)):
+            figs_daily.append(get_series(daily_df, i, combined_means_daily))
+
+        daily_combined_df = pd.DataFrame({"time": daily_df["time"]})
+        for k, v in combined_means_daily.items():
+            daily_combined_df[k] = v
+
+        # Nome del giorno tradotto per il titolo
+        day_name_en = day.strftime("%A")
+        day_name_it = DAY_NAMES_IT.get(day_name_en, day_name_en)
+        
+        day_label_it = f"{day_name_it} {day.strftime('%d-%m')}"
+        
+        # Genera HTML
+        html_content_daily = f"<h1>Previsioni Dettagliate per {day_label_it} ({folder_name.upper()})</h1>"
+        
+        # Aggiunge un link per tornare all'indice principale
+        html_content_daily += f"<p style='padding: 10px;'><a href='index.html' class='day-link'>← Torna alla panoramica 7 giorni</a></p>"
+
+        combined_daily_fig = create_mid_graph(daily_df, daily_combined_df) 
+        html_content_daily += pio.to_html(combined_daily_fig, full_html=False, include_plotlyjs='cdn')
+        
+        html_content_daily += f"<h2 style='padding-top: 30px;'>Dettagli Modelli</h2>"
+        for i in range(len(figs_daily)):
+            html_content_daily += pio.to_html(figs_daily[i], full_html=False, include_plotlyjs=False)
+
+        # SALVATAGGIO PAGINA GIORNALIERA (0.html, 1.html, ...)
+        filename = f"{idx}.html"
+        final_html_daily = create_final_html(html_content_daily, f"Meteo Forecast - {folder_name.upper()} - {day_label_it}", timestamp_html)
+        with open(os.path.join(folder_name, filename), "w", encoding="utf-8") as f:
+            f.write(final_html_daily)
+            
+    print(f"--- Elaborazione completata per la cartella: {folder_name} ---\n")
+
+
+# --- ESECUZIONE GLOBALE ---
+
+if __name__ == "__main__":
+    for folder, config in LOCATIONS.items():
+        generate_forecast_pages(folder, config["lat"], config["lon"])
