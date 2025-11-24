@@ -395,7 +395,7 @@ if __name__ == "__main__":
     PDF_PAST["time"] = pd.to_datetime(PDF_PAST["time"], utc=True).dt.tz_convert("Europe/Rome")
     
     # Esegue l'operazione lenta UNA SOLA VOLTA
-    HISTORICAL_LOOKUP = precalculate_historical_lookup(PDF_PAST) 
+    HISTORICAL_LOOKUP = pd.read_pickle("historical_lookup.pkl")# precalculate_historical_lookup(PDF_PAST) 
 
     # 2. ESECUZIONE PER OGNI POSIZIONE
     for folder, config in LOCATIONS.items():
