@@ -287,7 +287,7 @@ def generate_forecast_pages(folder_name, latitude, longitude, historical_lookup)
     print(f"--- Elaborazione iniziata per la cartella: {folder_name} ---")
 
     # 1. Creazione della cartella e download dati
-    # os.makedirs(folder_name, exist_ok=True)
+    os.makedirs(folder_name, exist_ok=True)
     # json_path = os.path.join(folder_name, "open-meteo.json")
     # get_data(latitude, longitude, json_path)
     
