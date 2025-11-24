@@ -1,3 +1,4 @@
+import sys
 import json
 import numpy as np
 import pandas as pd
@@ -12,11 +13,11 @@ from plotly.subplots import make_subplots
 
 # --- CONFIGURAZIONE POSIZIONI ---
 
-LOCATIONS = {
-    "home": {"lat": 45.7256, "lon": 12.6897}#,
-    # "cs": {"lat": 45.7585, "lon": 12.8447},
-    # "rugby": {"lat": 45.6956, "lon": 12.7102}
-}
+# LOCATIONS = {
+#     "home": {"lat": 45.7256, "lon": 12.6897}#,
+#     # "cs": {"lat": 45.7585, "lon": 12.8447},
+#     # "rugby": {"lat": 45.6956, "lon": 12.7102}
+# }
 
 
 # --- COSTANTI E TRADUZIONI ---
@@ -386,21 +387,42 @@ def generate_forecast_pages(folder_name, latitude, longitude, historical_lookup)
 
 # --- ESECUZIONE GLOBALE (con pre-calcolo) ---
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
     
-    # 1. PRE-CARICAMENTO E PRE-CALCOLO DATI STORICI (OTTIMIZZAZIONE MASSIMA)
+#     # 1. PRE-CARICAMENTO E PRE-CALCOLO DATI STORICI (OTTIMIZZAZIONE MASSIMA)
+#     with open("historical.json", "r", encoding="utf_8") as pf:
+#         past_data = json.load(pf)
+#     PDF_PAST = pd.DataFrame(past_data["hourly"])
+#     PDF_PAST["time"] = pd.to_datetime(PDF_PAST["time"], utc=True).dt.tz_convert("Europe/Rome")
+    
+#     # Esegue l'operazione lenta UNA SOLA VOLTA
+#     HISTORICAL_LOOKUP = pd.read_pickle("historical_lookup.pkl")# precalculate_historical_lookup(PDF_PAST) 
+
+#     # 2. ESECUZIONE PER OGNI POSIZIONE
+#     # for folder, config in LOCATIONS.items():
+#     #     # Passiamo solo il lookup table pre-calcolato (operazione veloce)
+#     #     generate_forecast_pages(folder, config["lat"], config["lon"], HISTORICAL_LOOKUP)
+#     for folder, config in LOCATIONS.items():
+#         folder_path = os.path.join("output", folder)
+#         generate_forecast_pages(folder_path, config["lat"], config["lon"], HISTORICAL_LOOKUP)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 4:
+        print("Uso: python spaghetti.py <Nome> <Lat> <Lon>")
+        sys.exit(1)
+
+    folder_name = sys.argv[1]
+    latitude = float(sys.argv[2])
+    longitude = float(sys.argv[3])
+
+    # 1. PRE-CARICAMENTO E PRE-CALCOLO DATI STORICI
     with open("historical.json", "r", encoding="utf_8") as pf:
         past_data = json.load(pf)
     PDF_PAST = pd.DataFrame(past_data["hourly"])
     PDF_PAST["time"] = pd.to_datetime(PDF_PAST["time"], utc=True).dt.tz_convert("Europe/Rome")
-    
-    # Esegue l'operazione lenta UNA SOLA VOLTA
-    HISTORICAL_LOOKUP = pd.read_pickle("historical_lookup.pkl")# precalculate_historical_lookup(PDF_PAST) 
+    HISTORICAL_LOOKUP = pd.read_pickle("historical_lookup.pkl") # precalculated
 
-    # 2. ESECUZIONE PER OGNI POSIZIONE
-    # for folder, config in LOCATIONS.items():
-    #     # Passiamo solo il lookup table pre-calcolato (operazione veloce)
-    #     generate_forecast_pages(folder, config["lat"], config["lon"], HISTORICAL_LOOKUP)
-    for folder, config in LOCATIONS.items():
-        folder_path = os.path.join("output", folder)
-        generate_forecast_pages(folder_path, config["lat"], config["lon"], HISTORICAL_LOOKUP)
+    # 2. ESECUZIONE PER LA SINGOLA POSIZIONE
+    folder_path = os.path.join("output", folder_name)
+    generate_forecast_pages(folder_path, latitude, longitude, HISTORICAL_LOOKUP)
