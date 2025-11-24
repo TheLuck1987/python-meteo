@@ -398,6 +398,9 @@ if __name__ == "__main__":
     HISTORICAL_LOOKUP = pd.read_pickle("historical_lookup.pkl")# precalculate_historical_lookup(PDF_PAST) 
 
     # 2. ESECUZIONE PER OGNI POSIZIONE
+    # for folder, config in LOCATIONS.items():
+    #     # Passiamo solo il lookup table pre-calcolato (operazione veloce)
+    #     generate_forecast_pages(folder, config["lat"], config["lon"], HISTORICAL_LOOKUP)
     for folder, config in LOCATIONS.items():
-        # Passiamo solo il lookup table pre-calcolato (operazione veloce)
-        generate_forecast_pages(folder, config["lat"], config["lon"], HISTORICAL_LOOKUP)
+        folder_path = os.path.join("output", folder)
+        generate_forecast_pages(folder_path, config["lat"], config["lon"], HISTORICAL_LOOKUP)
