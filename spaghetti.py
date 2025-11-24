@@ -60,7 +60,10 @@ def get_series(df, serie_index, combined_means, pdf_indexed=None):
     past_values = None
     if serie_index==0 and pdf_indexed is not None:
         df['date_key'] = df['time'].dt.strftime("%m-%d %H:%M")
-        past_values = df['date_key'].map(lambda x: robust_mean(pdf_indexed.loc[x].values) if x in pdf_indexed.index else np.nan)
+        past_values = df['date_key'].map(
+            lambda x: robust_mean([v for sublist in pdf_indexed.loc[x] for v in (sublist if isinstance(sublist, list) else [sublist])])
+            if x in pdf_indexed.index else np.nan
+        )
         combined_means[PAST_MEAN_LABEL] = past_values
     if valid_fields:
         df["mean"] = df[valid_fields].apply(robust_mean, axis=1)
