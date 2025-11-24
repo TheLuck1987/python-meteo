@@ -8,15 +8,26 @@ import requests
 from datetime import datetime
 from plotly.colors import qualitative
 from plotly.subplots import make_subplots
-from scipy.stats import trim_mean
+# from scipy.stats import trim_mean # Rimosso se non usato, per pulizia
+
+# --- COSTANTI E TRADUZIONI ---
 
 source_names = [ "_gfs_global", "_ecmwf_ifs", "_ecmwf_ifs025", "_icon_global", "_icon_d2", "_meteofrance_arpege_europe", "_knmi_harmonie_arome_europe", "_dmi_harmonie_arome_europe", "_italia_meteo_arpae_icon_2i", "_bom_access_global", "_cma_grapes_global" ]
 friendly_sources = [ "GFS", "ECMWF", "ECMWF_025", "ICON", "ICON_D2", "ARPEGE", "KNMI", "DMI", "ARPAE", "BOM", "CMA" ]
-field_names = [ "temperature_2m", "precipitation", "precipitation_probability", "cape", "wind_speed_10m", "wind_gusts_10m", "surface_pressure", "cloud_cover", "relative_humidity_2m", "dew_point_2m", "apparent_temperature", "rain", "showers", "snowfall"  ]
-serie_names = [ "T", "PREC", "PREC. PROB.", "CAPE", "WIND", "GUSTS", "PRESSURE", "CLOUD COVER", "HUMIDITY", "DEWPOINT", "APPARENT T", "RAIN", "SHOWERS", "SNOW" ]
-titles = ["Temperature [°C]", "Precipitation [mm/h]", "Precipitation probablility [%]", "Cape index [J/kg]", "Wind speed [km/h]", "Wind gusts [km/h]", "Pressure [hPa]", "Cloud cover [%]", "Relative humidity [%]", "Dewpoint [°C]", "Apparent temperature [°C]", "Rain [mm/h]", "Showers [mm/h]", "Snow [cm/h]" ]
+field_names = [ "temperature_2m", "precipitation", "precipitation_probability", "cape", "wind_speed_10m", "wind_gusts_10m", "surface_pressure", "cloud_cover", "relative_humidity_2m", "dew_point_2m", "apparent_temperature", "rain", "showers", "snowfall" ]
 
-combined_means = {}
+# TRADUZIONI IN ITALIANO (Usate nei grafici e nelle legende)
+serie_names_it = [ "Temperatura", "Precipitazioni", "Prob. Prec.", "CAPE", "Vento", "Raffiche", "Pressione", "Copertura Nuvolosa", "Umidità Relativa", "Punto di Rugiada", "Temp. Percepita", "Pioggia", "Rovesci", "Neve" ]
+titles_it = ["Temperatura [°C]", "Precipitazioni [mm/h]", "Probabilità di Precipitazioni [%]", "Indice CAPE [J/kg]", "Velocità del Vento [km/h]", "Raffiche di Vento [km/h]", "Pressione [hPa]", "Copertura Nuvolosa [%]", "Umidità Relativa [%]", "Punto di Rugiada [°C]", "Temperatura Percepita [°C]", "Pioggia [mm/h]", "Rovesci [mm/h]", "Neve [cm/h]" ]
+
+# TITOLI E ASSI GENERALI
+X_AXIS_TITLE = "Ora (Locale)"
+TITLE_MAIN = "Previsioni Medie 7 Giorni"
+TITLE_DETAIL = "Previsioni Dettagliate per Modello"
+PAST_MEAN_LABEL = "MEDIA 50 ANNI"
+
+
+# --- FUNZIONI DI BASE ---
 
 def get_data():
     url = "https://api.open-meteo.com/v1/forecast?latitude=45.7256&longitude=12.6897&daily=wind_direction_10m_dominant&hourly=temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,precipitation_probability,precipitation,cloud_cover,wind_speed_10m,wind_gusts_10m,wind_direction_10m,surface_pressure,cape,snowfall,showers,rain&models=ecmwf_ifs025,icon_d2,gfs_global,ecmwf_ifs,icon_global,gem_regional,knmi_harmonie_arome_europe,dmi_harmonie_arome_europe,meteofrance_arpege_europe,italia_meteo_arpae_icon_2i,bom_access_global,cma_grapes_global"
@@ -33,10 +44,10 @@ def robust_mean(row):
     else:
         vals = row.dropna().values
     if len(vals) == 0:
-        return np.nan        
+        return np.nan    
     Q1 = np.percentile(vals, 25)
     Q3 = np.percentile(vals, 75)
-    IQR = Q3 - Q1        
+    IQR = Q3 - Q1    
     lower_fence = Q1 - 1.5 * IQR
     upper_fence = Q3 + 1.5 * IQR
     filtered = [v for v in vals if lower_fence <= v <= upper_fence]
@@ -53,28 +64,37 @@ def get_past(date, pdf):
             values.append(match.iloc[0])
     return robust_mean(values)
 
-def create_mid_graph(df):
+# --- FUNZIONI DI GENERAZIONE GRAFICI E HTML ---
+
+def create_mid_graph(df, combined_data): 
+    """Crea il grafico principale combinato (Mean/Past/Selected Models)"""
     fig = go.Figure()
     colors = qualitative.Light24
+    
     def is_visible(idx):
+        # Visibili di default: Temperatura, Precipitazioni, Prob. Prec., Pioggia (11)
         if idx == 0 or idx == 1 or idx == 2 or idx == 11:
             return True
         else:
             return "legendonly"
+            
     def is_dashed(idx):
-        if idx == 0:
+        if idx == 0: # Media storica
             return "longdash"
         else:
             return "solid"
-    for idx, col in enumerate(combined_df.columns[1:]):
+            
+    # Itera sui dati combinati passati (combined_data)
+    for idx, col in enumerate(combined_data.columns[1:]): 
         fig.add_trace(go.Scatter(
-            x=df["time"], y=df[col],
+            x=df["time"], y=combined_data[col],
             mode="lines", name=col,
             line=dict(width=1.5,color=colors[idx % len(colors)],dash=is_dashed(idx)),
             visible=is_visible(idx) 
         ))
+        
     fig.update_layout(
-        xaxis_title="Time (Local)",
+        xaxis_title=X_AXIS_TITLE,
         template="plotly_dark",
         legend=dict(
             orientation="h",
@@ -84,8 +104,10 @@ def create_mid_graph(df):
         ),
         hovermode="x unified",
         height=650
-    )    
-    tickvals = [t for t in df["time"] if t.hour == 0]    
+    )  
+    
+    # Configurazione Asse X e linee verticali per i giorni
+    tickvals = [t for t in df["time"] if t.hour == 0]  
     fig.update_xaxes(
         ticklabelmode= "period", 
         minor=dict(ticks="inside", showgrid=True, dtick=60*60*1000, tick0=df["time"].min(), griddash='dot', gridcolor='rgba(50,50,50,0.5)'),
@@ -95,25 +117,30 @@ def create_mid_graph(df):
         tickvals=tickvals,
         tickformat="%a %d-%m",
         hoverformat="%a %d-%m %H:%M"
-    )    
+    )  
     for t in df["time"]:
         if t.hour == 0:
             fig.add_vline(x=t, line_width=2, line_dash="solid", line_color="white")
         elif t.hour == 12:
-            fig.add_vline(x=t, line_width=1.5, line_dash="solid", line_color="rgba(130,130,130,0.5)")        
+            fig.add_vline(x=t, line_width=1.5, line_dash="solid", line_color="rgba(130,130,130,0.5)")    
     return fig
 
-def get_series(df, serie_index):    
+def get_series(df, serie_index, current_combined_means): 
+    """Crea il grafico di una singola serie e alimenta i dati medi nel dizionario locale"""
     def valid_field_names(index):
         temp_fields = []
         for i in range(len(friendly_sources)):
             temp_fields.append(field_names[index] + source_names[i])
-        return [f for f in temp_fields if f in df.columns and df[f].notna().any()]         
+        return [f for f in temp_fields if f in df.columns and df[f].notna().any()]     
+    
     def rename_serie(field_index, field) -> str:
         index = source_names.index(field.replace(field_names[field_index], ""))
-        return friendly_sources[index]        
-    valid_fields = valid_field_names(serie_index)    
+        return friendly_sources[index]    
+        
+    valid_fields = valid_field_names(serie_index)  
     past_values = None
+    
+    # Gestione della serie storica (solo per la temperatura, serie_index == 0)
     if serie_index == 0:
         with open("historical.json", "r", encoding="utf_8") as pf:
             past_data = json.load(pf)
@@ -122,36 +149,46 @@ def get_series(df, serie_index):
         past_values = []
         for d in df["time"]:
             past_values.append(get_past(d, pdf))
-        combined_means["PAST 50y"] = past_values.copy()    
+        current_combined_means[PAST_MEAN_LABEL] = past_values.copy() 
+        
+    # Calcolo della media robusta e aggiornamento del dizionario locale
     if valid_fields:
         df["mean"] = df[valid_fields].apply(robust_mean, axis=1)
-        combined_means[serie_names[serie_index]] = df["mean"].copy()
+        current_combined_means[serie_names_it[serie_index]] = df["mean"].copy() 
+        
     fig = go.Figure()
+    
+    # Aggiunta serie storica
     if past_values != None:
         df["past"] = past_values
         fig.add_trace(go.Scatter(
             x=df["time"], y=df["past"],
-            mode="lines", name="PAST 50y",
+            mode="lines", name=PAST_MEAN_LABEL,
             line=dict(width=1.5, dash="longdash", color="red"),
             visible=True 
-        ))            
+        ))      
+        
+    # Aggiunta serie dei singoli modelli
     for i in range(len(valid_fields)):
         fig.add_trace(go.Scatter(
             x=df["time"], y=df[valid_fields[i]],
             mode="lines", name=rename_serie(serie_index, valid_fields[i]),
             line=dict(width=1.5),
             visible=True 
-        ))        
+        ))    
+        
+    # Aggiunta serie della media robusta (in blu)
     if valid_fields:
         fig.add_trace(go.Scatter(
             x=df["time"], y=df["mean"],
-            mode="lines", name=serie_names[serie_index],
+            mode="lines", name=serie_names_it[serie_index], 
             line=dict(width=3, dash="solid", color="blue"),
             visible=True 
-        ))     
+        ))   
+        
     fig.update_layout(
-        title=titles[serie_index],
-        xaxis_title="Time (Local)",
+        title=titles_it[serie_index], # USA TITOLO TRADOTTO
+        xaxis_title=X_AXIS_TITLE,
         template="plotly_dark",
         legend=dict(
             orientation="h",
@@ -161,8 +198,10 @@ def get_series(df, serie_index):
         ),
         hovermode="x unified",
         height=400
-    )    
-    tickvals = [t for t in df["time"] if t.hour == 0]    
+    )  
+    
+    # Configurazione Asse X e linee verticali per i giorni
+    tickvals = [t for t in df["time"] if t.hour == 0]  
     fig.update_xaxes(
         ticklabelmode= "period", 
         minor=dict(ticks="inside", showgrid=True, dtick=60*60*1000, tick0=df["time"].min(), griddash='dot', gridcolor='rgba(50,50,50,0.5)'),
@@ -172,39 +211,22 @@ def get_series(df, serie_index):
         tickvals=tickvals,
         tickformat="%a %d-%m",
         hoverformat="%a %d-%m %H:%M"
-    )    
+    )  
     for t in df["time"]:
         if t.hour == 0:
             fig.add_vline(x=t, line_width=2, line_dash="solid", line_color="white")
         elif t.hour == 12:
-            fig.add_vline(x=t, line_width=1.5, line_dash="solid", line_color="rgba(130,130,130,0.5)")  
+            fig.add_vline(x=t, line_width=1.5, line_dash="solid", line_color="rgba(130,130,130,0.5)") 
     return fig
 
-get_data()
-
-with open("open-meteo.json", "r", encoding="utf_8") as f:
-    data = json.load(f)    
-df = pd.DataFrame(data["hourly"])
-df["time"] = pd.to_datetime(df["time"], utc=True).dt.tz_convert("Europe/Rome")
-df = df[df['time'] >= df.iloc[0]['time'].normalize() + pd.Timedelta(hours=datetime.now().hour)]
-figs = []
-for i in range(len(field_names)):
-    figs.append(get_series(df, i))
-combined_df = pd.DataFrame({"time": df["time"]})
-for k, v in combined_means.items():
-    combined_df[k] = v
-html_content = "<h1>Next 7 days overview</h1>"
-combined_fig = create_mid_graph(combined_df)
-html_content += pio.to_html(combined_fig, full_html=False, include_plotlyjs='cdn')
-html_content += "<h1 style='padding-top: 30px;'>Detailed Model Forecasts</h1>"
-for i in range(len(figs)):
-    html_content += pio.to_html(figs[i], full_html=False, include_plotlyjs=False)
-final_html = f"""
+def create_final_html(content, title):
+    """Genera la struttura HTML completa con header, CSS e script di refresh"""
+    return f"""
 <!DOCTYPE html>
-<html lang="en">
+<html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>Meteo Forecast Analysis</title>
+    <title>{title}</title>
     <script>
         function refreshPage() {{
             console.log('Eseguo il refresh della pagina...');
@@ -214,6 +236,7 @@ final_html = f"""
         function setPageRefresh() {{
             let now = new Date();
             let currentSeconds = now.getMinutes() * 60 + now.getSeconds() + now.getMilliseconds() / 1000;
+            // Calcola il prossimo target all'1 minuto o 31 minuti dall'ora, o 1 min dopo l'ora successiva
             let nextTargetSeconds = currentSeconds < 1 * 60 ? 1 * 60 : currentSeconds < 31 * 60 ? 31 * 60 : 1 * 60 + 3600;
             let difference = nextTargetSeconds - currentSeconds;
             if (difference < 0)
@@ -226,13 +249,89 @@ final_html = f"""
     <style>
         body {{ background-color: #111; color: #fff; font-family: 'Inter', sans-serif; padding: 0px; margin: 0px; max-width: calc(100% - 20px); overflow-x: hidden; }}
         h1 {{ color: #4CAF50; border-bottom: 2px solid #4CAF50; max-width: calc(100% - 20px); overflow: hidden; padding: 10px; }}
+        h2 {{ color: #777; border-bottom: 1px solid #777; max-width: calc(100% - 20px); overflow: hidden; padding: 10px; }}
     </style>
 </head>
 <body>
-{html_content}
+{content}
 <script>setPageRefresh()</script>
 </body>
 </html>
 """
-with open("graph.html", "w", encoding="utf-8") as f:
-    f.write(final_html)
+
+# --- ESECUZIONE PRINCIPALE ---
+
+get_data()
+
+with open("open-meteo.json", "r", encoding="utf_8") as f:
+    data = json.load(f)  
+df = pd.DataFrame(data["hourly"])
+df["time"] = pd.to_datetime(df["time"], utc=True).dt.tz_convert("Europe/Rome")
+df = df[df['time'] >= df.iloc[0]['time'].normalize() + pd.Timedelta(hours=datetime.now().hour)]
+
+# Ottieni la lista dei giorni unici nel DataFrame
+unique_days = df["time"].dt.date.unique()
+
+# --- GENERAZIONE PAGINA PRINCIPALE (index.html) ---
+
+# Dizionario locale per i dati medi totali
+combined_means_main = {}
+figs_combined = []
+
+for i in range(len(field_names)):
+    # Popola il dizionario combined_means_main
+    figs_combined.append(get_series(df, i, combined_means_main)) 
+
+# Crea il DataFrame combinato per la pagina principale
+combined_df_main = pd.DataFrame({"time": df["time"]})
+for k, v in combined_means_main.items():
+    combined_df_main[k] = v
+
+html_content_main = f"<h1>{TITLE_MAIN}</h1>"
+# Passa il DataFrame completo (df) e i dati combinati (combined_df_main)
+combined_fig = create_mid_graph(df, combined_df_main) 
+html_content_main += pio.to_html(combined_fig, full_html=False, include_plotlyjs='cdn')
+html_content_main += f"<h1 style='padding-top: 30px;'>{TITLE_DETAIL}</h1>"
+for i in range(len(figs_combined)):
+    html_content_main += pio.to_html(figs_combined[i], full_html=False, include_plotlyjs=False)
+
+# SALVATAGGIO PAGINA PRINCIPALE
+final_html_main = create_final_html(html_content_main, "Meteo Forecast - Tutti i Giorni")
+with open("index.html", "w", encoding="utf-8") as f:
+    f.write(final_html_main)
+
+# --- GENERAZIONE PAGINE GIORNALIERE ---
+
+for day in unique_days:
+    # Filtra il DataFrame per il giorno corrente
+    daily_df = df[df["time"].dt.date == day].copy()
+    
+    # Dizionario locale per i dati medi giornalieri (IMPORTANTE: NUOVO PER OGNI GIORNO)
+    combined_means_daily = {} 
+    
+    figs_daily = []
+    for i in range(len(field_names)):
+        # Popola il dizionario combined_means_daily
+        figs_daily.append(get_series(daily_df, i, combined_means_daily))
+
+    daily_combined_df = pd.DataFrame({"time": daily_df["time"]})
+    for k, v in combined_means_daily.items():
+        daily_combined_df[k] = v
+
+    # Genera HTML
+    day_name = day.strftime("%A %d-%m") 
+    html_content_daily = f"<h1>Previsioni Dettagliate per {day_name}</h1>"
+    
+    # Passa il DataFrame filtrato (daily_df) e i dati combinati (daily_combined_df)
+    combined_daily_fig = create_mid_graph(daily_df, daily_combined_df) 
+    html_content_daily += pio.to_html(combined_daily_fig, full_html=False, include_plotlyjs='cdn')
+    
+    html_content_daily += f"<h2 style='padding-top: 30px;'>Dettagli Modelli</h2>"
+    for i in range(len(figs_daily)):
+        html_content_daily += pio.to_html(figs_daily[i], full_html=False, include_plotlyjs=False)
+
+    # SALVATAGGIO PAGINA GIORNALIERA (es. 2025-11-24.html)
+    filename = f"{day.strftime('%Y-%m-%d')}.html"
+    final_html_daily = create_final_html(html_content_daily, f"Meteo Forecast - {day_name}")
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(final_html_daily)
