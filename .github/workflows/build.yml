@@ -18,7 +18,7 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt
       - run: python spaghetti.py home 45.7256 12.6897
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: home-output
           path: ./output/home
@@ -33,7 +33,7 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt
       - run: python spaghetti.py cs 45.7585 12.8447
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: cs-output
           path: ./output/cs
@@ -48,7 +48,7 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt
       - run: python spaghetti.py rugby 45.6956 12.7102
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: rugby-output
           path: ./output/rugby
