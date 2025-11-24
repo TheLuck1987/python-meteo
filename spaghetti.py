@@ -13,9 +13,9 @@ from plotly.subplots import make_subplots
 # --- CONFIGURAZIONE POSIZIONI ---
 
 LOCATIONS = {
-    "home": {"lat": 45.7256, "lon": 12.6897},
-    "cs": {"lat": 45.7585, "lon": 12.8447},
-    "rugby": {"lat": 45.6956, "lon": 12.7102}
+    "home": {"lat": 45.7256, "lon": 12.6897}#,
+    # "cs": {"lat": 45.7585, "lon": 12.8447},
+    # "rugby": {"lat": 45.6956, "lon": 12.7102}
 }
 
 
