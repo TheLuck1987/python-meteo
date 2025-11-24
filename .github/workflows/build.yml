@@ -23,7 +23,7 @@ jobs:
         run: python -m pip install -r requirements.txt
 
       - name: Execute Forecast Script
-        run: python generate_main_only.py
+        run: python spaghetti.py
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
