@@ -59,15 +59,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Download Artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: home-output
           path: ./output/home
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: cs-output
           path: ./output/cs
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: rugby-output
           path: ./output/rugby
