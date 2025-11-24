@@ -1,18 +1,10 @@
 name: Generate and Publish Page
 
 on:
- # 1. Trigger manuale (se vuoi avviarla tu dalla tab Actions)
   workflow_dispatch:
-  
-  # 2. Trigger ogni volta che c'è un push sul branch 'main'
   push:
     branches: [ main ]
-    
-  # 3. Trigger programmato (la novità)
   schedule:
-    # Esegue l'azione all'inizio di ogni ora (es. 00:00, 01:00, 02:00, etc.)
-    # Sintassi: minuto ora giorno_del_mese mese giorno_della_settimana
-    # * * * * *
     - cron: '59 * * * *'
 
 jobs:
@@ -30,13 +22,12 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
 
-      - name: Execute Python Script
-        run: python spaghetti.py
+      - name: Execute Forecast Script
+        run: python generate_main_only.py
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
-          # Il file 'index.html' generato da Python
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: .
+          publish_dir: ./output
           keep_files: true
