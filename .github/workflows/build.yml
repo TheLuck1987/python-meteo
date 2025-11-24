@@ -28,7 +28,7 @@ jobs:
           python-version: '3.12'
 
       - name: Execute Python Script
-        run: python src/spagetti.py
+        run: python src/../spagetti.py
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
