@@ -60,6 +60,7 @@ HIST_CACHE = HIST_PDF.groupby("key")["temperature_2m"].apply(list).to_dict()
 
 def robust_mean(vals):
     vals = np.asarray(vals)
+    vals = vals[~pd.isnull(vals)]
     if vals.size == 0:
         return np.nan
 
