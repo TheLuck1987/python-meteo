@@ -159,9 +159,9 @@ def create_mid_graph(df):
 
     for t in df["time"]:
         if t.hour == 0:
-            fig.add_vline(x=t, line_width=2, color="white")
+            fig.add_vline(x=t, line_width=2, line=dict(color="white"))
         elif t.hour == 12:
-            fig.add_vline(x=t, line_width=1.5, color="rgba(130,130,130,0.5)")
+            fig.add_vline(x=t, line_width=1.5, line=dict(color="rgba(130,130,130,0.5)"))
 
     return fig
 
