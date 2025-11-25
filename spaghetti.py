@@ -10,6 +10,7 @@ import os
 from datetime import datetime
 from plotly.colors import qualitative
 from plotly.subplots import make_subplots
+from zoneinfo import ZoneInfo
 
 # --- CONFIGURAZIONE POSIZIONI ---
 
@@ -293,7 +294,7 @@ def generate_forecast_pages(folder_name, latitude, longitude, historical_lookup)
     # get_data(latitude, longitude, json_path)
     
     # Genera il timestamp di elaborazione
-    now = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+    now = datetime.now(ZoneInfo("Europe/Rome")).strftime("%d-%m-%Y %H:%M:%S")
     timestamp_html = f'<div class="timestamp">Ultimo aggiornamento: {now}</div>'
 
     # 2. Caricamento e preparazione dati
@@ -336,9 +337,15 @@ def generate_forecast_pages(folder_name, latitude, longitude, historical_lookup)
     html_content_main += link_html 
 
     combined_fig = create_mid_graph(df, combined_df_main) 
+    combined_fig.update_layout(
+        dragmode=False
+    )
     html_content_main += pio.to_html(combined_fig, full_html=False, include_plotlyjs='cdn', config={ "displayModeBar": False, "scrollZoom": False, "doubleClick": False })
     html_content_main += f"<h1 style='padding-top: 30px;'>{TITLE_DETAIL}</h1>"
     for i in range(len(figs_combined)):
+        figs_combined[i].update_layout(
+            dragmode=False
+        )
         html_content_main += pio.to_html(figs_combined[i], full_html=False, include_plotlyjs=False, config={ "displayModeBar": False, "scrollZoom": False, "doubleClick": False })
 
     # SALVATAGGIO PAGINA PRINCIPALE
@@ -366,14 +373,20 @@ def generate_forecast_pages(folder_name, latitude, longitude, historical_lookup)
         day_name_it = DAY_NAMES_IT.get(day_name_en, day_name_en)
         day_label_it = f"{day_name_it} {day.strftime('%d-%m')}"
         
-        html_content_daily = f"<h1>Previsioni Dettagliate per {day_label_it} ({folder_name.upper()})</h1>"
+        html_content_daily = f"<h1>Previsioni Dettagliate per {day_label_it} ({folder_name.replace("output/", "").upper()})</h1>"
         html_content_daily += f"<p style='padding: 10px;'><a href='index.html' class='day-link'>← Torna alla panoramica 7 giorni</a></p>"
 
         combined_daily_fig = create_mid_graph(daily_df, daily_combined_df) 
+        combined_daily_fig.update_layout(
+            dragmode=False
+        )
         html_content_daily += pio.to_html(combined_daily_fig, full_html=False, include_plotlyjs='cdn', config={ "displayModeBar": False, "scrollZoom": False, "doubleClick": False })
         
         html_content_daily += f"<h2 style='padding-top: 30px;'>Dettagli Modelli</h2>"
         for i in range(len(figs_daily)):
+            figs_daily[i].update_layout(
+                dragmode=False
+            )
             html_content_daily += pio.to_html(figs_daily[i], full_html=False, include_plotlyjs=False, config={ "displayModeBar": False, "scrollZoom": False, "doubleClick": False })
 
         # SALVATAGGIO PAGINA GIORNALIERA (0.html, 1.html, ...)
